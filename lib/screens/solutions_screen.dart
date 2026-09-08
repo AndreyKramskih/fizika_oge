@@ -1,6 +1,7 @@
 // lib/screens/solutions_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../data/solutions_data.dart';
 
 class SolutionsScreen extends StatefulWidget {
@@ -13,6 +14,31 @@ class SolutionsScreen extends StatefulWidget {
 class _SolutionsScreenState extends State<SolutionsScreen> {
   String selectedTopic = 'Все темы';
   List<String> get topics => ['Все темы', ...SolutionsData.getTopics()];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedTopic();
+  }
+
+  Future<void> _loadSavedTopic() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedTopic = prefs.getString('solutions_topic') ?? 'Все темы';
+      if (topics.contains(savedTopic)) {
+        setState(() {
+          selectedTopic = savedTopic;
+        });
+      }
+    } catch (e) {}
+  }
+
+  Future<void> _saveTopic(String topic) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('solutions_topic', topic);
+    } catch (e) {}
+  }
 
   List<SolutionExample> get filteredSolutions {
     if (selectedTopic == 'Все темы') {
@@ -79,6 +105,7 @@ class _SolutionsScreenState extends State<SolutionsScreen> {
                   setState(() {
                     selectedTopic = value!;
                   });
+                  _saveTopic(selectedTopic);
                 },
                 style: TextStyle(color: colorScheme.onSurface),
                 icon: Icon(Icons.arrow_drop_down, color: colorScheme.onSurface),

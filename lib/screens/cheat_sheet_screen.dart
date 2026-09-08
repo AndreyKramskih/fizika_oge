@@ -1,6 +1,7 @@
 // lib/screens/cheat_sheet_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../data/formulas_data.dart';
 
 class CheatSheetScreen extends StatefulWidget {
@@ -13,6 +14,32 @@ class CheatSheetScreen extends StatefulWidget {
 class _CheatSheetScreenState extends State<CheatSheetScreen> {
   String selectedTopic = 'Все темы';
   List<String> get topics => ['Все темы', ...FormulasData.getTopics()];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedTopic();
+  }
+
+  Future<void> _loadSavedTopic() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedTopic = prefs.getString('cheat_sheet_topic') ?? 'Все темы';
+      if (topics.contains(savedTopic)) {
+        setState(() {
+          selectedTopic = savedTopic;
+        });
+      }
+    } catch (e) {}
+  }
+
+  // ✅ МЕТОД СОХРАНЕНИЯ ТЕМЫ — ТЕПЕРЬ ИСПОЛЬЗУЕТСЯ
+  Future<void> _saveTopic(String topic) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('cheat_sheet_topic', topic);
+    } catch (e) {}
+  }
 
   List<Formula> get filteredFormulas {
     if (selectedTopic == 'Все темы') {
@@ -36,7 +63,6 @@ class _CheatSheetScreenState extends State<CheatSheetScreen> {
           IconButton(
             icon: const Icon(Icons.bookmark),
             onPressed: () {
-              // Показываем количество формул
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
@@ -80,6 +106,8 @@ class _CheatSheetScreenState extends State<CheatSheetScreen> {
                   setState(() {
                     selectedTopic = value!;
                   });
+                  // ✅ СОХРАНЯЕМ ВЫБРАННУЮ ТЕМУ
+                  _saveTopic(selectedTopic);
                 },
                 style: TextStyle(color: colorScheme.onSurface),
                 icon: Icon(Icons.arrow_drop_down, color: colorScheme.onSurface),

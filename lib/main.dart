@@ -1,5 +1,6 @@
 // lib/main.dart
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -10,10 +11,10 @@ import 'package:fizika_oge/providers/theme_provider.dart';
 import 'package:fizika_oge/screens/statistics_screen.dart';
 import 'package:fizika_oge/screens/cheat_sheet_screen.dart';
 import 'package:fizika_oge/screens/settings_screen.dart';
+import 'package:fizika_oge/screens/solutions_screen.dart';
+import 'package:fizika_oge/screens/calculator_screen.dart';
 import 'package:fizika_oge/services/statistics_service.dart';
 import 'package:fizika_oge/services/feedback_service.dart';
-import 'package:fizika_oge/screens/solutions_screen.dart';
-import 'dart:async';
 
 void main() {
   runApp(
@@ -32,7 +33,7 @@ class MyApp extends StatelessWidget {
     final themeProvider = Provider.of<ThemeProvider>(context);
 
     return MaterialApp(
-      title: 'ОГЭ Физика Тренажер',
+      title: 'ОГЭ Физика',
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
@@ -69,7 +70,7 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   List<Task> currentVariant = [];
   Map<String, String> userAnswers = {};
   bool showResults = false;
@@ -90,6 +91,7 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadSettings();
     _loadSavedState();
     FeedbackService.init();
@@ -97,12 +99,22 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
-    _saveState(); // Сохраняем при закрытии (может не успеть, но попытка не пытка)
+    _saveState();
     super.dispose();
   }
 
-  // ✅ СОХРАНЕНИЕ В SHARED_PREFERENCES — вызывается при каждом изменении
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _saveState();
+    }
+  }
+
+  // ✅ СОХРАНЕНИЕ
   void _saveState() {
     try {
       SharedPreferences.getInstance().then((prefs) {
@@ -114,7 +126,6 @@ class _MainScreenState extends State<MainScreen> {
           prefs.setString('saved_topic', selectedTopic);
           prefs.setInt('saved_elapsed_seconds', elapsedSeconds);
           prefs.setBool('saved_is_timer_running', isTimerRunning);
-          // Не выводим логи, чтобы не засорять консоль
         } else {
           prefs.remove('saved_task_ids');
           prefs.remove('saved_answers');
@@ -132,13 +143,11 @@ class _MainScreenState extends State<MainScreen> {
   // ✅ ЗАГРУЗКА
   Future<void> _loadSavedState() async {
     try {
-      print('📂 ЗАГРУЗКА...');
       final prefs = await SharedPreferences.getInstance();
 
       List<String>? savedTaskIds = prefs.getStringList('saved_task_ids');
 
       if (savedTaskIds == null || savedTaskIds.isEmpty) {
-        print('ℹ️ Нет сохраненных задач');
         setState(() {
           _isLoading = false;
         });
@@ -157,7 +166,7 @@ class _MainScreenState extends State<MainScreen> {
           final task = TasksData.allTasks.firstWhere((t) => t.id == id);
           restoredTasks.add(task);
         } catch (e) {
-          print('⚠️ Задача с ID $id не найдена');
+          // Игнорируем
         }
       }
 
@@ -198,10 +207,7 @@ class _MainScreenState extends State<MainScreen> {
           _startTimerFromSaved();
         }
       });
-
-      print('✅ ЗАГРУЖЕНО: ${restoredTasks.length} задач');
     } catch (e) {
-      print('❌ Ошибка загрузки: $e');
       setState(() {
         _isLoading = false;
       });
@@ -293,7 +299,7 @@ class _MainScreenState extends State<MainScreen> {
     });
 
     startTimer();
-    _saveState(); // ✅ СОХРАНЯЕМ
+    _saveState();
   }
 
   void checkAnswers() {
@@ -320,7 +326,7 @@ class _MainScreenState extends State<MainScreen> {
     });
 
     _provideFeedback();
-    _saveState(); // ✅ СОХРАНЯЕМ
+    _saveState();
   }
 
   void _provideFeedback() {
@@ -394,7 +400,7 @@ class _MainScreenState extends State<MainScreen> {
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Тренажер ОГЭ Физика'),
+          title: const Text('ОГЭ Физика'),
           backgroundColor: Colors.blue,
           foregroundColor: Colors.white,
         ),
@@ -413,36 +419,27 @@ class _MainScreenState extends State<MainScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Тренажер ОГЭ Физика'),
+        title: const Text('ОГЭ Физика'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 2,
         actions: [
-          // Кнопка "Как решать"
+          // Калькулятор
           IconButton(
-            icon: const Icon(Icons.help_outline),
+            icon: const Icon(Icons.calculate, size: 22),
             onPressed: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const SolutionsScreen(),
+                  builder: (context) => const CalculatorScreen(),
                 ),
               );
             },
-            tooltip: 'Как решать',
+            tooltip: 'Калькулятор',
           ),
+          // Шпаргалка
           IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SettingsScreen()),
-              ).then((_) => _loadSettings());
-            },
-            tooltip: 'Настройки',
-          ),
-          IconButton(
-            icon: const Icon(Icons.book),
+            icon: const Icon(Icons.book, size: 22),
             onPressed: () {
               Navigator.push(
                 context,
@@ -453,24 +450,85 @@ class _MainScreenState extends State<MainScreen> {
             },
             tooltip: 'Шпаргалка',
           ),
-          IconButton(
-            icon: const Icon(Icons.brightness_6),
-            onPressed: () {
-              Provider.of<ThemeProvider>(context, listen: false).toggleTheme();
+          // Меню
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              switch (value) {
+                case 'solutions':
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SolutionsScreen(),
+                    ),
+                  );
+                  break;
+                case 'settings':
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SettingsScreen(),
+                    ),
+                  ).then((_) => _loadSettings());
+                  break;
+                case 'theme':
+                  Provider.of<ThemeProvider>(
+                    context,
+                    listen: false,
+                  ).toggleTheme();
+                  break;
+                case 'statistics':
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const StatisticsScreen(),
+                    ),
+                  );
+                  break;
+              }
             },
-            tooltip: 'Сменить тему',
-          ),
-          IconButton(
-            icon: const Icon(Icons.bar_chart),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const StatisticsScreen(),
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'solutions',
+                child: Row(
+                  children: [
+                    Icon(Icons.help_outline),
+                    SizedBox(width: 8),
+                    Text('Как решать'),
+                  ],
                 ),
-              );
-            },
-            tooltip: 'Статистика',
+              ),
+              const PopupMenuItem(
+                value: 'settings',
+                child: Row(
+                  children: [
+                    Icon(Icons.settings),
+                    SizedBox(width: 8),
+                    Text('Настройки'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'statistics',
+                child: Row(
+                  children: [
+                    Icon(Icons.bar_chart),
+                    SizedBox(width: 8),
+                    Text('Статистика'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'theme',
+                child: Row(
+                  children: [
+                    Icon(Icons.brightness_6),
+                    SizedBox(width: 8),
+                    Text('Сменить тему'),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -478,6 +536,7 @@ class _MainScreenState extends State<MainScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            // Выбор темы
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
@@ -502,7 +561,7 @@ class _MainScreenState extends State<MainScreen> {
                   setState(() {
                     selectedTopic = value!;
                   });
-                  _saveState(); // ✅ СОХРАНЯЕМ
+                  _saveState();
                 },
                 style: TextStyle(color: colorScheme.onSurface),
                 icon: Icon(Icons.arrow_drop_down, color: colorScheme.onSurface),
@@ -510,6 +569,7 @@ class _MainScreenState extends State<MainScreen> {
             ),
             const SizedBox(height: 10),
 
+            // Кнопки
             Row(
               children: [
                 Expanded(
@@ -581,6 +641,7 @@ class _MainScreenState extends State<MainScreen> {
 
             const SizedBox(height: 15),
 
+            // Прогресс
             if (currentVariant.isNotEmpty)
               Container(
                 padding: const EdgeInsets.all(12),
@@ -669,6 +730,7 @@ class _MainScreenState extends State<MainScreen> {
 
             const SizedBox(height: 15),
 
+            // Список задач
             Expanded(
               child: currentVariant.isEmpty
                   ? Center(
@@ -885,7 +947,7 @@ class _MainScreenState extends State<MainScreen> {
                                           setState(() {
                                             userAnswers[task.id] = value;
                                           });
-                                          _saveState(); // ✅ СОХРАНЯЕМ ПРИ ВВОДЕ
+                                          _saveState();
                                         },
                                         enabled: !showResults,
                                         style: TextStyle(
